@@ -2,7 +2,15 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 const { GoogleGenAI } = require('@google/genai');
 const Tesseract = require('tesseract.js');
-const { searchItem, getAllItems, getAllQuests } = require('../dataManager');
+const { searchItem, getAllItems } = require('../dataManager');
+
+const VISION_MODELS = [
+    'gemini-3.7-flash',
+    'gemini-3.6-flash',
+    'gemini-2.0-flash',
+    'gemini-2.5-flash',
+    'gemini-1.5-flash'
+];
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -33,9 +41,9 @@ module.exports = {
             const mimeType = attachment.contentType || 'image/png';
 
             let detectedItems = [];
+            let successfulModel = null;
 
             if (geminiApiKey && geminiApiKey.trim() !== '') {
-                // High-precision Gemini Vision Scan
                 const ai = new GoogleGenAI({ apiKey: geminiApiKey.trim() });
                 
                 const allItemNames = getAllItems().map(i => i.name?.en || i.id).filter(Boolean);
@@ -56,53 +64,65 @@ Example output format:
 Reference game item names include: ${sampleList}, and other known ARC Raiders weapons, mods, shields, resources, blueprints, gadgets, and loot.
 If no recognizable game items are visible, return an empty array [].`;
 
-                const aiResponse = await ai.models.generateContent({
-                    model: 'gemini-3.7-flash',
-                    contents: [
-                        {
-                            role: 'user',
-                            parts: [
-                                { text: prompt },
+                // Try model with automatic fallback if Google servers experience 503 high demand
+                let textOutput = '';
+                for (const modelName of VISION_MODELS) {
+                    try {
+                        const aiResponse = await ai.models.generateContent({
+                            model: modelName,
+                            contents: [
                                 {
-                                    inlineData: {
-                                        mimeType: mimeType,
-                                        data: base64Image
-                                    }
+                                    role: 'user',
+                                    parts: [
+                                        { text: prompt },
+                                        {
+                                            inlineData: {
+                                                mimeType: mimeType,
+                                                data: base64Image
+                                            }
+                                        }
+                                    ]
                                 }
                             ]
-                        }
-                    ]
-                });
+                        });
+                        textOutput = aiResponse.text || '';
+                        successfulModel = modelName;
+                        break;
+                    } catch (modelErr) {
+                        console.warn(`[Vision AI] Model ${modelName} returned error (${modelErr.message}), trying next model...`);
+                    }
+                }
 
-                let textOutput = aiResponse.text || '';
-                // Clean markdown code blocks if returned
-                textOutput = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-                try {
-                    const parsed = JSON.parse(textOutput);
-                    if (Array.isArray(parsed)) {
-                        for (const entry of parsed) {
-                            const matched = searchItem(entry.name, true);
-                            if (matched.length > 0) {
-                                detectedItems.push({
-                                    item: matched[0],
-                                    name: matched[0].name?.en || matched[0].id,
-                                    quantity: entry.quantity || 1
-                                });
-                            } else {
-                                detectedItems.push({
-                                    item: { rarity: 'Unknown', value: 0 },
-                                    name: entry.name,
-                                    quantity: entry.quantity || 1
-                                });
+                if (textOutput) {
+                    textOutput = textOutput.replace(/```json/gi, '').replace(/```/g, '').trim();
+                    try {
+                        const parsed = JSON.parse(textOutput);
+                        if (Array.isArray(parsed)) {
+                            for (const entry of parsed) {
+                                const matched = searchItem(entry.name, true);
+                                if (matched.length > 0) {
+                                    detectedItems.push({
+                                        item: matched[0],
+                                        name: matched[0].name?.en || matched[0].id,
+                                        quantity: entry.quantity || 1
+                                    });
+                                } else {
+                                    detectedItems.push({
+                                        item: { rarity: 'Unknown', value: 0 },
+                                        name: entry.name,
+                                        quantity: entry.quantity || 1
+                                    });
+                                }
                             }
                         }
+                    } catch (parseErr) {
+                        console.error('Failed to parse AI Vision JSON output:', textOutput);
                     }
-                } catch (parseErr) {
-                    console.error('Failed to parse AI Vision JSON output:', textOutput);
                 }
-            } else {
-                // Fallback to Tesseract OCR if GEMINI_API_KEY is not set
+            }
+
+            // Fallback to OCR if AI Vision was unavailable or unconfigured
+            if (detectedItems.length === 0 && (!geminiApiKey || geminiApiKey.trim() === '' || !successfulModel)) {
                 const { data: { lines: ocrLines, text } } = await Tesseract.recognize(
                     imageBuffer,
                     'eng',
@@ -137,7 +157,7 @@ If no recognizable game items are visible, return an empty array [].`;
             if (detectedItems.length === 0) {
                 const embed = new EmbedBuilder()
                     .setTitle('🔍 Scan Results')
-                    .setDescription('No known Arc Raiders items could be identified from this screenshot.\n\n*Make sure your GEMINI_API_KEY is configured in Pterodactyl Startup, or upload a clearer screenshot.*')
+                    .setDescription('No known Arc Raiders items could be identified from this screenshot.\n\n*If servers are under high demand, please try again in a few moments or upload a closer screenshot.*')
                     .setColor('#E74C3C')
                     .setThumbnail(attachment.url);
 
@@ -155,7 +175,7 @@ If no recognizable game items are visible, return an empty array [].`;
                 itemListText += `• **${r.name}**${qtyText} [${rarity}]${itemVal > 0 ? ` - 🪙 ${itemVal.toLocaleString()}` : ''}\n`;
             }
 
-            const isAiPowered = !!(geminiApiKey && geminiApiKey.trim() !== '');
+            const isAiPowered = !!successfulModel;
 
             const embed = new EmbedBuilder()
                 .setTitle(`🔍 ${isAiPowered ? 'AI Vision' : 'OCR'} Stash Scan Results`)
@@ -166,7 +186,7 @@ If no recognizable game items are visible, return an empty array [].`;
                     { name: 'Estimated Stash Value', value: totalValue > 0 ? `🪙 ${totalValue.toLocaleString()}` : 'Variable / N/A', inline: true },
                     { name: 'Total Slots Detected', value: `${detectedItems.length}`, inline: true }
                 )
-                .setFooter({ text: isAiPowered ? 'ARC Raiders Bot • Powered by Gemini Vision AI' : 'ARC Raiders Bot • Local OCR' });
+                .setFooter({ text: isAiPowered ? `ARC Raiders Bot • Powered by ${successfulModel}` : 'ARC Raiders Bot • Local OCR' });
 
             return interaction.editReply({ embeds: [embed] });
 

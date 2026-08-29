@@ -39,29 +39,47 @@ for (const file of commandFiles) {
     }
 }
 
-// Auto-register slash commands on startup
-async function registerSlashCommands(appId) {
+// Clean old commands and register fresh commands
+async function syncSlashCommands(appId) {
     const targetClientId = clientId || appId;
     if (!targetClientId) return;
 
     const rest = new REST().setToken(token);
     try {
-        console.log(`[Commands] Syncing ${commands.length} application (/) commands...`);
+        console.log('[Commands] Cleaning old/outdated guild commands across all connected servers...');
+        
+        // 1. Wipe old guild-specific commands for every guild the bot is in
+        const guilds = await client.guilds.fetch();
+        for (const [id, guild] of guilds) {
+            try {
+                await rest.put(
+                    Routes.applicationGuildCommands(targetClientId, id),
+                    { body: [] }
+                );
+            } catch (err) {
+                console.warn(`[Commands] Could not clear guild commands for ${guild.name} (${id}): ${err.message}`);
+            }
+        }
+        console.log(`[Commands] Successfully wiped leftover guild commands from ${guilds.size} servers.`);
+
+        // 2. Overwrite global commands with the exact current Arc Raiders command set
+        console.log(`[Commands] Deploying ${commands.length} fresh global commands (${commands.map(c => '/' + c.name).join(', ')})...`);
+        const deployed = await rest.put(
+            Routes.applicationCommands(targetClientId),
+            { body: commands }
+        );
+        console.log(`[Commands] Successfully deployed ${deployed.length} fresh global commands.`);
+
+        // If a specific GUILD_ID is specified for immediate testing, deploy there as well
         if (guildId && guildId.trim() !== '') {
             await rest.put(
-                Routes.applicationGuildCommands(targetClientId, guildId),
+                Routes.applicationGuildCommands(targetClientId, guildId.trim()),
                 { body: commands }
             );
-            console.log(`[Commands] Successfully registered ${commands.length} commands to Guild ${guildId}.`);
-        } else {
-            await rest.put(
-                Routes.applicationCommands(targetClientId),
-                { body: commands }
-            );
-            console.log(`[Commands] Successfully registered ${commands.length} commands globally.`);
+            console.log(`[Commands] Also registered instant commands to Guild ID ${guildId}.`);
         }
     } catch (error) {
-        console.error('[Commands] Failed to register slash commands:', error.message);
+        console.error('[Commands] Error syncing slash commands:', error.message);
     }
 }
 
@@ -80,14 +98,14 @@ client.once(Events.ClientReady, async c => {
 
     console.log(`=======================================================`);
     console.log(`[Arc Raiders Bot] Logged in as ${c.user.tag}`);
-    console.log(`Loaded ${client.commands.size} commands.`);
+    console.log(`Loaded ${client.commands.size} Arc Raiders commands.`);
     console.log(`Ready to serve ARC Raiders community.`);
     console.log(`-------------------------------------------------------`);
     console.log(`🔗 BOT INVITE URL:\n${inviteUrl}`);
     console.log(`=======================================================`);
 
-    // Auto sync commands with Discord API
-    await registerSlashCommands(c.user.id);
+    // Clean old commands and deploy fresh
+    await syncSlashCommands(c.user.id);
 });
 
 client.on(Events.InteractionCreate, async interaction => {
@@ -106,7 +124,9 @@ client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    if (!command) {
+        return interaction.reply({ content: '❌ This command is no longer available.', ephemeral: true });
+    }
 
     try {
         await command.execute(interaction);

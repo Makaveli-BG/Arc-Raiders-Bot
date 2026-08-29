@@ -39,16 +39,16 @@ for (const file of commandFiles) {
     }
 }
 
-// Clean old commands and register fresh commands
+// Clean old commands and register exclusively as Global commands (prevents duplicates)
 async function syncSlashCommands(appId) {
     const targetClientId = clientId || appId;
     if (!targetClientId) return;
 
     const rest = new REST().setToken(token);
     try {
-        console.log('[Commands] Cleaning old/outdated guild commands across all connected servers...');
+        console.log('[Commands] Cleaning all guild-specific slash commands to prevent duplication...');
         
-        // 1. Wipe old guild-specific commands for every guild the bot is in
+        // 1. Wipe guild-level commands for all connected guilds (Guild commands override/duplicate global ones in Discord UI)
         const guilds = await client.guilds.fetch();
         for (const [id, guild] of guilds) {
             try {
@@ -60,24 +60,25 @@ async function syncSlashCommands(appId) {
                 console.warn(`[Commands] Could not clear guild commands for ${guild.name} (${id}): ${err.message}`);
             }
         }
-        console.log(`[Commands] Successfully wiped leftover guild commands from ${guilds.size} servers.`);
 
-        // 2. Overwrite global commands with the exact current Arc Raiders command set
+        // If a specific GUILD_ID was provided in environment variables, ensure it is also wiped
+        if (guildId && guildId.trim() !== '') {
+            try {
+                await rest.put(
+                    Routes.applicationGuildCommands(targetClientId, guildId.trim()),
+                    { body: [] }
+                );
+            } catch (err) {}
+        }
+        console.log(`[Commands] Cleaned guild-level duplicate commands.`);
+
+        // 2. Set pure Global commands
         console.log(`[Commands] Deploying ${commands.length} fresh global commands (${commands.map(c => '/' + c.name).join(', ')})...`);
         const deployed = await rest.put(
             Routes.applicationCommands(targetClientId),
             { body: commands }
         );
-        console.log(`[Commands] Successfully deployed ${deployed.length} fresh global commands.`);
-
-        // If a specific GUILD_ID is specified for immediate testing, deploy there as well
-        if (guildId && guildId.trim() !== '') {
-            await rest.put(
-                Routes.applicationGuildCommands(targetClientId, guildId.trim()),
-                { body: commands }
-            );
-            console.log(`[Commands] Also registered instant commands to Guild ID ${guildId}.`);
-        }
+        console.log(`[Commands] Successfully deployed ${deployed.length} clean global commands.`);
     } catch (error) {
         console.error('[Commands] Error syncing slash commands:', error.message);
     }
@@ -104,7 +105,7 @@ client.once(Events.ClientReady, async c => {
     console.log(`🔗 BOT INVITE URL:\n${inviteUrl}`);
     console.log(`=======================================================`);
 
-    // Clean old commands and deploy fresh
+    // Clean old commands and deploy pure global set
     await syncSlashCommands(c.user.id);
 });
 

@@ -1,0 +1,18 @@
+{
+  "name": "arc-raiders-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord Bot for Arc Raiders featuring Item Info, Quests, Traders, and OCR Inventory Scanning",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "deploy-commands": "node src/deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "fuse.js": "^7.0.0",
+    "axios": "^1.7.7",
+    "tesseract.js": "^5.1.1"
+  }
+}

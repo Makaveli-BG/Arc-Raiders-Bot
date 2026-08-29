@@ -1,0 +1,113 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-08-29T20:25:00+00:00",
+    "name": "Arc Raiders Discord Bot",
+    "author": "support@pterodactyl.io",
+    "description": "Discord Bot for Arc Raiders with Item Lookup, Quests, Traders, and OCR Inventory Scanning.",
+    "features": null,
+    "docker_images": {
+        "ghcr.io/parkervcp/yolks:nodejs_22": "ghcr.io/parkervcp/yolks:nodejs_22",
+        "node:22-bullseye-slim": "node:22-bullseye-slim"
+    },
+    "file_denylist": [],
+    "startup": "if [ -d .git ]; then git pull; fi; if [ -f /home/container/package.json ]; then npm install --production; fi; /usr/local/bin/node /home/container/{{BOT_JS_FILE}}",
+    "config": {
+        "files": "{}",
+        "startup": "{\r\n    \"done\": \"Logged in as\"\r\n}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# NodeJS App Installation Script\n\napt-get update\napt-get install -y git curl jq file tar unzip tesseract-ocr tesseract-ocr-eng\n\ncd /mnt/server\n\nif [ -n \"${GIT_ADDRESS}\" ]; then\n    if [ -z \"${GIT_USERNAME}\" ] && [ -z \"${GIT_ACCESS_TOKEN}\" ]; then\n        git clone ${GIT_ADDRESS} .\n    else\n        GIT_ADDRESS_CLEAN=$(echo -e ${GIT_ADDRESS} | cut -d/ -f3-)\n        git clone https://${GIT_USERNAME}:${GIT_ACCESS_TOKEN}@${GIT_ADDRESS_CLEAN} .\n    fi\n    if [ -n \"${GIT_BRANCH}\" ]; then\n        git checkout ${GIT_BRANCH}\n    fi\nfi\n\nif [ -f /mnt/server/package.json ]; then\n    /usr/local/bin/npm install --production\nfi\n\necho \"Installation complete!\"",
+            "container": "node:22-bullseye-slim",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Discord Bot Token",
+            "description": "The bot token from the Discord Developer Portal.",
+            "env_variable": "DISCORD_TOKEN",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:120",
+            "field_type": "text"
+        },
+        {
+            "name": "Discord Client ID",
+            "description": "Application Client ID from Discord Developer Portal.",
+            "env_variable": "CLIENT_ID",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:40",
+            "field_type": "text"
+        },
+        {
+            "name": "Discord Guild ID",
+            "description": "Guild / Server ID for registering instant guild slash commands (optional, leaves global if blank).",
+            "env_variable": "GUILD_ID",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:40",
+            "field_type": "text"
+        },
+        {
+            "name": "Bot Main JS File",
+            "description": "The entrypoint file for Node.js.",
+            "env_variable": "BOT_JS_FILE",
+            "default_value": "src/index.js",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Git Repository (Optional)",
+            "description": "Git repository URL to automatically clone on install.",
+            "env_variable": "GIT_ADDRESS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        },
+        {
+            "name": "Git Branch",
+            "description": "Branch to checkout if cloning git repo.",
+            "env_variable": "GIT_BRANCH",
+            "default_value": "main",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        },
+        {
+            "name": "Git Username",
+            "description": "Username for private git repo.",
+            "env_variable": "GIT_USERNAME",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        },
+        {
+            "name": "Git Access Token",
+            "description": "Personal Access Token for private git repo.",
+            "env_variable": "GIT_ACCESS_TOKEN",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        }
+    ]
+}

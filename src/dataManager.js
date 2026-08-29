@@ -6,8 +6,18 @@ let items = [];
 let quests = [];
 let bots = [];
 let trades = [];
-let itemsFuse = null;
+let itemsFuseStrict = null;
+let itemsFuseFuzzy = null;
 let questsFuse = null;
+
+// UI & Common noise words in screenshots to ignore
+const UI_STOPWORDS = new Set([
+    'inventory', 'stash', 'backpack', 'weight', 'value', 'price', 'quantity', 'select', 'drop',
+    'split', 'equip', 'unequip', 'back', 'close', 'press', 'interact', 'hold', 'level', 'lvl',
+    'common', 'uncommon', 'rare', 'epic', 'legendary', 'exotic', 'ammo', 'slot', 'slots',
+    'arc', 'raiders', 'health', 'shield', 'armor', 'capacity', 'sell', 'buy', 'trade', 'craft',
+    'recycle', 'upgrade', 'details', 'stats', 'durability', 'condition', 'storage', 'loadout'
+]);
 
 function loadData() {
     const itemsDir = path.join(__dirname, 'data', 'items');
@@ -53,10 +63,27 @@ function loadData() {
         }
     } catch (e) {}
 
-    // Fuse instances for quick fuzzy searches
-    itemsFuse = new Fuse(items, {
-        keys: ['id', 'name.en', 'type', 'rarity'],
+    // Strict Fuse for OCR scanning - only matches exact/close Item Name & ID
+    itemsFuseStrict = new Fuse(items, {
+        keys: [
+            { name: 'name.en', weight: 2.0 },
+            { name: 'id', weight: 1.0 }
+        ],
+        threshold: 0.22, // Strict threshold prevents false positives
+        minMatchCharLength: 4,
+        ignoreLocation: true,
+        includeScore: true
+    });
+
+    // Flexible Fuse for user search commands (/item)
+    itemsFuseFuzzy = new Fuse(items, {
+        keys: [
+            { name: 'name.en', weight: 2.0 },
+            { name: 'id', weight: 1.5 },
+            { name: 'type', weight: 0.5 }
+        ],
         threshold: 0.35,
+        minMatchCharLength: 2,
         ignoreLocation: true
     });
 
@@ -69,9 +96,20 @@ function loadData() {
     console.log(`[DataManager] Loaded ${items.length} items and ${quests.length} quests.`);
 }
 
-function searchItem(query) {
-    if (!itemsFuse) loadData();
-    const results = itemsFuse.search(query);
+function searchItem(query, strict = false) {
+    if (!itemsFuseStrict) loadData();
+
+    const cleanQuery = query.trim().toLowerCase();
+    if (!cleanQuery || cleanQuery.length < 3) return [];
+
+    if (strict) {
+        if (UI_STOPWORDS.has(cleanQuery)) return [];
+        const results = itemsFuseStrict.search(query);
+        // Only return if confidence score is high (lower is better in Fuse)
+        return results.filter(r => r.score <= 0.22).map(r => r.item);
+    }
+
+    const results = itemsFuseFuzzy.search(query);
     return results.length > 0 ? results.map(r => r.item) : [];
 }
 
@@ -96,5 +134,6 @@ module.exports = {
     searchItem,
     searchQuest,
     getAllItems,
-    getAllQuests
+    getAllQuests,
+    UI_STOPWORDS
 };

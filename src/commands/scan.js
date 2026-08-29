@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const Tesseract = require('tesseract.js');
-const { searchItem, getAllItems } = require('../dataManager');
+const { searchItem, UI_STOPWORDS } = require('../dataManager');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,7 +23,7 @@ module.exports = {
 
         try {
             // Run OCR with Tesseract
-            const { data: { text } } = await Tesseract.recognize(
+            const { data: { text, blocks, lines: ocrLines } } = await Tesseract.recognize(
                 attachment.url,
                 'eng',
                 {
@@ -31,25 +31,31 @@ module.exports = {
                 }
             );
 
-            // Clean lines and search items
-            const lines = text.split('\n')
-                .map(l => l.trim())
-                .filter(l => l.length >= 3);
+            // Filter out junk text, single short tokens, and UI noise
+            const rawLines = (ocrLines && ocrLines.length > 0)
+                ? ocrLines.map(l => l.text.trim())
+                : text.split('\n').map(l => l.trim());
 
             const detectedItems = new Map();
-            const allItems = getAllItems();
 
-            for (const line of lines) {
-                // Check direct matching or fuzzy matches
-                const matched = searchItem(line);
+            for (const line of rawLines) {
+                // Strip punctuation and special OCR artifacts
+                const cleanLine = line.replace(/[^a-zA-Z0-9\s-]/g, '').trim();
+
+                // Skip lines that are too short or numeric
+                if (cleanLine.length < 4 || /^\d+$/.test(cleanLine)) continue;
+
+                // Check strict search against item database
+                const matched = searchItem(cleanLine, true);
                 if (matched.length > 0) {
                     const topMatch = matched[0];
                     const itemName = topMatch.name?.en || topMatch.id;
+
                     if (!detectedItems.has(topMatch.id)) {
                         detectedItems.set(topMatch.id, {
                             item: topMatch,
                             name: itemName,
-                            count: 1
+                            detectedText: cleanLine
                         });
                     }
                 }
@@ -60,7 +66,7 @@ module.exports = {
             if (results.length === 0) {
                 const embed = new EmbedBuilder()
                     .setTitle('🔍 Scan Results')
-                    .setDescription('Could not clearly identify known items from the screenshot.\n\n*Tip: Try taking a closer crop of the item names or stash grid for higher accuracy.*')
+                    .setDescription('No specific Arc Raiders items could be identified with high confidence.\n\n**Tips for better results:**\n• Ensure the screenshot is not blurry.\n• Crop closer to the item slots/stash grid.\n• Ensure in-game text/names are clearly visible.')
                     .setColor('#E74C3C')
                     .setThumbnail(attachment.url);
 
@@ -70,22 +76,24 @@ module.exports = {
             let totalValue = 0;
             let itemListText = '';
 
-            for (const r of results.slice(0, 20)) {
+            for (const r of results.slice(0, 25)) {
                 const val = r.item.value || 0;
                 totalValue += val;
-                itemListText += `• **${r.name}** (${r.item.rarity || 'Common'})${val ? ` - 🪙 ${val}` : ''}\n`;
+                const rarity = r.item.rarity || 'Common';
+                const type = r.item.type || r.item.category || '';
+                itemListText += `• **${r.name}** [${rarity}] ${type ? `*(${type})*` : ''}${val ? ` - 🪙 ${val}` : ''}\n`;
             }
 
             const embed = new EmbedBuilder()
-                .setTitle('🔍 Inventory / Stash Scan Completed')
-                .setDescription(`Identified **${results.length}** item(s) from your screenshot:\n\n${itemListText}`)
+                .setTitle('🔍 Inventory / Stash Scan Verified')
+                .setDescription(`Detected **${results.length}** distinct item(s):\n\n${itemListText}`)
                 .setColor('#2ECC71')
                 .setThumbnail(attachment.url)
                 .addFields(
-                    { name: 'Estimated Total Value', value: totalValue > 0 ? `🪙 ${totalValue.toLocaleString()}` : 'Variable / N/A', inline: true },
-                    { name: 'Items Found', value: `${results.length}`, inline: true }
+                    { name: 'Estimated Total Value', value: totalValue > 0 ? `🪙 ${totalValue.toLocaleString()}` : 'N/A', inline: true },
+                    { name: 'Total Items Detected', value: `${results.length}`, inline: true }
                 )
-                .setFooter({ text: 'Arc Raiders OCR Scanner • Uses Tesseract OCR' });
+                .setFooter({ text: 'Arc Raiders OCR Scanner • Strict Name Matching' });
 
             return interaction.editReply({ embeds: [embed] });
 

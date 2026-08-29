@@ -9,10 +9,11 @@
     "deploy-commands": "node src/deploy-commands.js"
   },
   "dependencies": {
+    "@google/genai": "^2.19.0",
+    "axios": "^1.20.0",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
     "fuse.js": "^7.0.0",
-    "axios": "^1.7.7",
     "tesseract.js": "^5.1.1"
   }
 }

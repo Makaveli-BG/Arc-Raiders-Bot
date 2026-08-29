@@ -4,10 +4,10 @@
         "version": "PTDL_v2",
         "update_url": null
     },
-    "exported_at": "2026-08-29T20:25:00+00:00",
+    "exported_at": "2026-08-29T20:48:00+00:00",
     "name": "Arc Raiders Discord Bot",
     "author": "support@pterodactyl.io",
-    "description": "Discord Bot for Arc Raiders with Item Lookup, Quests, Traders, and OCR Inventory Scanning.",
+    "description": "Discord Bot for Arc Raiders with Item Lookup, Quests, Traders, and AI Vision Inventory Scanning.",
     "features": null,
     "docker_images": {
         "ghcr.io/parkervcp/yolks:nodejs_22": "ghcr.io/parkervcp/yolks:nodejs_22",
@@ -50,8 +50,18 @@
             "field_type": "text"
         },
         {
+            "name": "Gemini API Key",
+            "description": "Free Google AI Studio API Key for AI Vision screenshot scanning.",
+            "env_variable": "GEMINI_API_KEY",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:100",
+            "field_type": "text"
+        },
+        {
             "name": "Discord Guild ID",
-            "description": "Guild / Server ID for registering instant guild slash commands (optional, leaves global if blank).",
+            "description": "Guild / Server ID for registering instant guild slash commands (optional).",
             "env_variable": "GUILD_ID",
             "default_value": "",
             "user_viewable": true,
@@ -73,7 +83,7 @@
             "name": "Git Repository (Optional)",
             "description": "Git repository URL to automatically clone on install.",
             "env_variable": "GIT_ADDRESS",
-            "default_value": "",
+            "default_value": "https://github.com/Makaveli-BG/Arc-Raiders-Bot.git",
             "user_viewable": true,
             "user_editable": true,
             "rules": "nullable|string",
@@ -84,26 +94,6 @@
             "description": "Branch to checkout if cloning git repo.",
             "env_variable": "GIT_BRANCH",
             "default_value": "main",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Git Username",
-            "description": "Username for private git repo.",
-            "env_variable": "GIT_USERNAME",
-            "default_value": "",
-            "user_viewable": true,
-            "user_editable": true,
-            "rules": "nullable|string",
-            "field_type": "text"
-        },
-        {
-            "name": "Git Access Token",
-            "description": "Personal Access Token for private git repo.",
-            "env_variable": "GIT_ACCESS_TOKEN",
-            "default_value": "",
             "user_viewable": true,
             "user_editable": true,
             "rules": "nullable|string",

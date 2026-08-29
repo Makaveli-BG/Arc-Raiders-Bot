@@ -57,7 +57,7 @@ Reference game item names include: ${sampleList}, and other known ARC Raiders we
 If no recognizable game items are visible, return an empty array [].`;
 
                 const aiResponse = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
+                    model: 'gemini-2.0-flash',
                     contents: [
                         {
                             role: 'user',
